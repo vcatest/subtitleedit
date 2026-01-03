@@ -34,4 +34,4 @@ jobs:
         echo "Download and extract BrowserStack CQ Scanner done"
         curl --silent --location --request GET "${{vars.EMBOLD_URL_CS}}/api/v1/repositories/a4441841681482d445413ae965ae7912/scans/config/download" --header "Authorization:Bearer ${{ secrets.EMBOLD_TOKEN_CS}}" -o repository-configuration.json
         echo "Download repository configuration file done"
-        ./browserstack-codequality-scanner/bin/embold-scanner analyse -u ${{vars.EMBOLD_URL_CS}} -t ${{ secrets.EMBOLD_TOKEN_CS}} -r a4441841681482d445413ae965ae7912 -b . -d ./embold-data -c ./repository-configuration.json -l ./embold-log -sh $GITHUB_WORKSPACE/embold-scanner-home -v
+        ./browserstack-codequality-scanner/bin/embold-scanner analyse -u ${{vars.EMBOLD_URL_CS}} -t ${{ secrets.EMBOLD_TOKEN_CS}} -r a4441841681482d445413ae965ae7912 -b . -d ./embold-data -c ./repository-configuration.json -v
