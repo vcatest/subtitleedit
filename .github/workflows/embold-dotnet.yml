@@ -1,4 +1,4 @@
-name: Build SubtitleEdit (Linux)
+name: Build Playnite
 
 on:
   push:
@@ -9,44 +9,54 @@ on:
 jobs:
   build:
     name: Build and Analyze
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        submodules: recursive # Playnite often uses submodules
 
-    # 1. Install Mono (Required to build .NET Framework 4.8 on Linux)
-    - name: Install Mono & MSBuild
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: |
+          8.0.x
+          9.0.x
+
+    # DYNAMICALLY FIND SOLUTION FILE
+    - name: Find Solution File
+      id: find-sln
+      shell: pwsh
       run: |
-        sudo apt-get update
-        sudo apt-get install -y mono-complete msbuild
+        echo "Searching for .sln files..."
+        $slnFile = Get-ChildItem -Path . -Filter *.sln -Recurse | Select-Object -First 1
+        
+        if ($null -eq $slnFile) {
+            echo "::error::No .sln file found! Listing all files to help debug:"
+            Get-ChildItem -Recurse | Select-Object FullName
+            exit 1
+        }
+        
+        echo "Found solution: $($slnFile.FullName)"
+        echo "SLN_PATH=$($slnFile.FullName)" >> $env:GITHUB_ENV
 
-    # 2. Download NuGet manually (apt-get version is often too old)
-    - name: Setup NuGet
-      run: |
-        sudo wget -O /usr/local/bin/nuget.exe https://dist.nuget.org/win-x86-commandline/latest/nuget.exe
-        echo '#!/bin/sh' | sudo tee /usr/local/bin/nuget
-        echo 'exec mono /usr/local/bin/nuget.exe "$@"' | sudo tee -a /usr/local/bin/nuget
-        sudo chmod +x /usr/local/bin/nuget
-
-    # 3. Restore using Mono's NuGet
     - name: Restore dependencies
-      run: nuget restore SubtitleEdit.sln
+      run: dotnet restore "${{ env.SLN_PATH }}"
 
-    # 4. Build using Mono's MSBuild
     - name: Build
-      run: msbuild SubtitleEdit.sln /p:Configuration=Release /p:Platform="Any CPU"
+      run: dotnet build "${{ env.SLN_PATH }}" --no-restore --configuration Release
 
     - name: Embold Analyse
+      shell: bash # Explicitly use bash on Windows for curl/tar compatibility
       run: |
-        # ⚠️ ENSURE 'EMBOLD_SCANNER_URL' POINTS TO THE LINUX VERSION OF THE SCANNER
         curl ${{ vars.EMBOLD_SCANNER_URL}} -o browserstack-codequality-scanner-archive.tar.gz
         tar xvf browserstack-codequality-scanner-archive.tar.gz
         echo "Download and extract BrowserStack CQ Scanner done"
         
-        # Using the Repo ID you provided: 316b066a57a4611fdecf0046aa1f26f5
+        # ⚠️ CAUTION: You provided the same Repo ID (316b...) as the previous repo.
+        # If this is a different project, ensure you use the UNIQUE ID for Playnite from Embold.
         curl --silent --location --request GET "${{ vars.EMBOLD_URL_CS}}/api/v1/repositories/316b066a57a4611fdecf0046aa1f26f5/scans/config/download" --header "Authorization:Bearer ${{ secrets.EMBOLD_TOKEN_CS}}" -o repository-configuration.json
         echo "Download repository configuration file done"
         
-        # Run the scanner
         ./browserstack-codequality-scanner/bin/embold-scanner analyse -u ${{ vars.EMBOLD_URL_CS}} -t ${{ secrets.EMBOLD_TOKEN_CS}} -r 316b066a57a4611fdecf0046aa1f26f5 -b . -d ./embold-data -c ./repository-configuration.json -v
